@@ -1,4 +1,4 @@
-name: ${{ parameters.image }}_$(Date:yyyyMMdd)_$(Rev:r)
+name: copa_$(Date:yyyyMMdd)_$(Rev:r)
 trigger: none
 pr: none
 
@@ -14,33 +14,40 @@ variables:
 
 stages:
   - stage: patch
-    steps:
-      - bash: |
-          wget "https://github.com/aquasecurity/trivy/releases/download/v$(trivy.version)/trivy_$(trivy.version)_Linux-64bit.tar.gz"
-          sudo tar -C /usr/local/bin -zxvf trivy_$(trivy.version)_Linux-*.tar.gz trivy
-          sudo chmod +x /usr/local/bin/trivy
-          wget "https://github.com/project-copacetic/copacetic/releases/download/v$(copa.version)/copa_$(copa.version)_linux_amd64.tar.gz"
-          sudo tar -C /usr/local/bin -zxvf copa_$(copa.version)_*.tar.gz copa
-          sudo chmod +x /usr/local/bin/copa
-        displayName: Download and Install Trivy and Copa
-      - bash: |
-          tag=${IMAGE#*:}  
-          BUILDKIT_VERSION=v0.10.5
-          BUILDKIT_PORT=8888
-          docker run \
-            --detach \
-            --rm \
-            --privileged \
-            -p 127.0.0.1:$BUILDKIT_PORT:$BUILDKIT_PORT/tcp \
-            --name buildkitd \
-            --entrypoint buildkitd \
-            "moby/buildkit:$BUILDKIT_VERSION" \
-            --addr tcp://0.0.0.0:$BUILDKIT_PORT
-          trivy image --vuln-type os --ignore-unfixed -f json -o copa-patch.json $IMAGE
-          copa patch \
-            -i $IMAGE \
-            -r copa-patch.json \
-            -t $tag-patched \
-            -a tcp://0.0.0.0:$BUILDKIT_PORT
-        env:
-          IMAGE: ${{ parameters.image }}
+    jobs:
+    - job: copa
+      steps:
+        - bash: |
+            wget "https://github.com/aquasecurity/trivy/releases/download/v$(trivy.version)/trivy_$(trivy.version)_Linux-64bit.tar.gz"
+            sudo tar -C /usr/local/bin -zxvf trivy_$(trivy.version)_Linux-*.tar.gz trivy
+            sudo chmod +x /usr/local/bin/trivy
+            wget "https://github.com/project-copacetic/copacetic/releases/download/v$(copa.version)/copa_$(copa.version)_linux_amd64.tar.gz"
+            sudo tar -C /usr/local/bin -zxvf copa_$(copa.version)_*.tar.gz copa
+            sudo chmod +x /usr/local/bin/copa
+          displayName: Download and Install Trivy and Copa
+        - bash: |
+            tag=${IMAGE#*:}  
+            BUILDKIT_VERSION=v0.10.5
+            BUILDKIT_PORT=8888
+            docker run \
+              --detach \
+              --rm \
+              --privileged \
+              -p 127.0.0.1:$BUILDKIT_PORT:$BUILDKIT_PORT/tcp \
+              --name buildkitd \
+              --entrypoint buildkitd \
+              "moby/buildkit:$BUILDKIT_VERSION" \
+              --addr tcp://0.0.0.0:$BUILDKIT_PORT
+            trivy image --vuln-type os --ignore-unfixed -f json -o copa-patch.json $IMAGE
+            copa patch \
+              -i $IMAGE \
+              -r copa-patch.json \
+              -t $tag-patched \
+              -a tcp://0.0.0.0:$BUILDKIT_PORT
+            docker images
+          env:
+            IMAGE: ${{ parameters.image }}
+        - task: PublishPipelineArtifact@1
+          inputs:
+            targetPath: $(System.DefaultWorkingDirectory)/copa-patch.json
+            artifactName: scan_results
