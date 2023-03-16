@@ -26,7 +26,8 @@ stages:
             sudo chmod +x /usr/local/bin/copa
           displayName: Download and Install Trivy and Copa
         - bash: |
-            tag=${IMAGE#*:}  
+            tag=${IMAGE#*:} 
+            repo=${IMAGE%:*} 
             BUILDKIT_VERSION=v0.10.5
             BUILDKIT_PORT=8888
             docker run \
@@ -44,10 +45,14 @@ stages:
               -r copa-patch.json \
               -t $tag-patched \
               -a tcp://0.0.0.0:$BUILDKIT_PORT
-            docker images
+            docker save -o patched-image.tar $repo:$tag-patched
           env:
             IMAGE: ${{ parameters.image }}
         - task: PublishPipelineArtifact@1
           inputs:
             targetPath: $(System.DefaultWorkingDirectory)/copa-patch.json
             artifactName: scan_results
+        - task: PublishPipelineArtifact@1
+          inputs:
+            targetPath: $(System.DefaultWorkingDirectory)/patched-image.tar
+            artifactName: patched
